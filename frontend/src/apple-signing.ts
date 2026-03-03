@@ -122,21 +122,16 @@ export async function loginAppleDeveloperAccount(
     password,
     request.anisetteData,
     (submitCode) => {
-      if (request.onTwoFactorRequired) {
-        request.onTwoFactorRequired((code) => {
-          const normalized = code.trim()
-          if (normalized.length === 0) {
-            throw new Error("2FA code is required")
-          }
-          submitCode(normalized)
-        })
-        return
+      if (!request.onTwoFactorRequired) {
+        throw new Error("2FA required but no in-page handler provided")
       }
-      const code = window.prompt("Apple 2FA code")
-      if (!code || code.trim().length === 0) {
-        throw new Error("2FA code is required")
-      }
-      submitCode(code.trim())
+      request.onTwoFactorRequired((code) => {
+        const normalized = code.trim()
+        if (normalized.length === 0) {
+          throw new Error("2FA code is required")
+        }
+        submitCode(normalized)
+      })
     },
   )
 

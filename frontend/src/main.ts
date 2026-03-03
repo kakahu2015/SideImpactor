@@ -384,6 +384,20 @@ app.innerHTML = `
     </section>
   </main>
 
+  <div id="two-factor-modal" class="trust-modal fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/55 p-4" aria-hidden="true">
+    <section role="dialog" aria-modal="true" aria-labelledby="two-factor-modal-title" class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/20">
+      <h2 id="two-factor-modal-title" class="text-lg font-semibold text-slate-900">Two-Factor Authentication</h2>
+      <p class="mt-2 text-sm leading-6 text-slate-600">Enter the verification code from your trusted device.</p>
+      <label for="two-factor-code" class="mt-4 block text-sm font-medium text-slate-700">Verification Code</label>
+      <input id="two-factor-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" class="mt-1 block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+      <p id="two-factor-error" class="mt-2 min-h-5 text-xs text-red-600"></p>
+      <div class="mt-3 grid grid-cols-2 gap-2">
+        <button id="two-factor-cancel" type="button" class="h-10 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
+        <button id="two-factor-submit" type="button" class="h-10 rounded-xl bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-700">Verify</button>
+      </div>
+    </section>
+  </div>
+
   <div id="trust-modal" class="trust-modal fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/55 p-4" aria-hidden="true">
     <section role="dialog" aria-modal="true" aria-labelledby="trust-modal-title" class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/20">
       <h2 id="trust-modal-title" class="text-lg font-semibold text-slate-900">Confirm Trust on Device</h2>
@@ -430,6 +444,11 @@ const statusLine = mustGetElement("status-line")
 const installProgressTextView = mustGetElement("install-progress-text")
 const installProgressBarView = mustGetElement("install-progress-bar")
 const logView = mustGetElement("log")
+const twoFactorModal = mustGetElement("two-factor-modal")
+const twoFactorCodeInput = mustGetInput("two-factor-code")
+const twoFactorErrorView = mustGetElement("two-factor-error")
+const twoFactorSubmitButton = mustGetButton("two-factor-submit")
+const twoFactorCancelButton = mustGetButton("two-factor-cancel")
 const trustModal = mustGetElement("trust-modal")
 const trustModalCloseButton = mustGetButton("trust-modal-close")
 
@@ -454,7 +473,10 @@ let busyInstall = false
 let installProgressPercent = 0
 let installProgressStatus = "idle"
 let waitingForTrustConfirmation = false
+let waitingForTwoFactorCode = false
+let twoFactorSubmitHandler: ((code: string) => void) | null = null
 let trustModalVisible = false
+let twoFactorModalVisible = false
 let currentPage: AppPage = resolvePageFromHash(window.location.hash)
 let selectedTargetUdid = loadText(SELECTED_DEVICE_UDID_STORAGE_KEY) ?? ""
 
@@ -482,6 +504,58 @@ const notifyPairingTrustPending = (): void => {
   trustModalVisible = true
   addLog("pair: waiting for confirm... please tap Trust on device")
   refreshUi()
+}
+
+const requestTwoFactorCode = (submitCode: (code: string) => void): void => {
+  waitingForTwoFactorCode = true
+  twoFactorSubmitHandler = submitCode
+  twoFactorCodeInput.value = ""
+  twoFactorErrorView.textContent = ""
+  twoFactorModalVisible = true
+  addLog("login: 2FA required, waiting for code")
+  refreshUi()
+  window.setTimeout(() => {
+    twoFactorCodeInput.focus()
+    twoFactorCodeInput.select()
+  }, 0)
+}
+
+const submitTwoFactorCode = (): void => {
+  if (!twoFactorSubmitHandler) {
+    return
+  }
+  const code = twoFactorCodeInput.value.trim()
+  if (code.length === 0) {
+    twoFactorErrorView.textContent = "Please enter verification code."
+    return
+  }
+
+  const submit = twoFactorSubmitHandler
+  twoFactorSubmitHandler = null
+  waitingForTwoFactorCode = false
+  twoFactorModalVisible = false
+  twoFactorErrorView.textContent = ""
+  refreshUi()
+  submit(code)
+}
+
+const cancelTwoFactorCode = (): void => {
+  if (!twoFactorSubmitHandler) {
+    twoFactorModalVisible = false
+    waitingForTwoFactorCode = false
+    refreshUi()
+    return
+  }
+
+  const submit = twoFactorSubmitHandler
+  twoFactorSubmitHandler = null
+  waitingForTwoFactorCode = false
+  twoFactorModalVisible = false
+  twoFactorCodeInput.value = ""
+  twoFactorErrorView.textContent = ""
+  refreshUi()
+  addLog("login: 2FA canceled")
+  submit("__CANCELLED__")
 }
 
 const closeTrustModal = (): void => {
@@ -655,6 +729,9 @@ const loginAndSignFlow = async (): Promise<void> => {
       anisetteData: anisette,
       credentials: { appleId, password },
       onLog: addLog,
+      onTwoFactorRequired: (submitCode) => {
+        requestTwoFactorCode(submitCode)
+      },
     })
 
     loginContext = await refreshAppleDeveloperContext(context, addLog)
@@ -672,6 +749,10 @@ const loginAndSignFlow = async (): Promise<void> => {
     addLog("login: done. continue on sign/install page")
     navigateToPage("sign")
   } finally {
+    waitingForTwoFactorCode = false
+    twoFactorSubmitHandler = null
+    twoFactorModalVisible = false
+    twoFactorErrorView.textContent = ""
     busyLoginSign = false
     refreshUi()
   }
@@ -850,7 +931,9 @@ const refreshUi = (): void => {
 
   trustModal.classList.toggle("open", trustModalVisible)
   trustModal.setAttribute("aria-hidden", trustModalVisible ? "false" : "true")
-  document.body.classList.toggle("modal-open", trustModalVisible)
+  twoFactorModal.classList.toggle("open", twoFactorModalVisible)
+  twoFactorModal.setAttribute("aria-hidden", twoFactorModalVisible ? "false" : "true")
+  document.body.classList.toggle("modal-open", trustModalVisible || twoFactorModalVisible)
 
   const currentSourceKey =
     selectedIpaFile && selectedTargetUdid
@@ -861,7 +944,7 @@ const refreshUi = (): void => {
   openSigningPageButton.disabled = busyLoginSign
   pairDeviceButton.disabled = busyPairing || busySign || busyInstall || !isSupported
   loginSignButton.disabled =
-    busyLoginSign || appleIdInput.value.trim().length === 0 || applePasswordInput.value.length === 0
+    busyLoginSign || waitingForTwoFactorCode || appleIdInput.value.trim().length === 0 || applePasswordInput.value.length === 0
   signButton.disabled =
     busyPairing || busyLoginSign || busySign || busyInstall || !selectedIpaFile || !loginContext || selectedTargetUdid.length === 0
   installButton.disabled =
@@ -1219,6 +1302,32 @@ dropArea.addEventListener("drop", (event) => {
   clearPreparedSigned()
   addLog(`ipa dropped: ${file.name}`)
   refreshUi()
+})
+
+twoFactorSubmitButton.addEventListener("click", () => {
+  submitTwoFactorCode()
+})
+
+twoFactorCancelButton.addEventListener("click", () => {
+  cancelTwoFactorCode()
+})
+
+twoFactorCodeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault()
+    submitTwoFactorCode()
+    return
+  }
+  if (event.key === "Escape") {
+    event.preventDefault()
+    cancelTwoFactorCode()
+  }
+})
+
+twoFactorCodeInput.addEventListener("input", () => {
+  if (twoFactorErrorView.textContent) {
+    twoFactorErrorView.textContent = ""
+  }
 })
 
 trustModalCloseButton.addEventListener("click", () => {
