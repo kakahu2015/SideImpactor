@@ -2,6 +2,7 @@
   "name": "webmuxd-wisp-workers-demo",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.3.11",
   "scripts": {
     "build:frontend": "cd ../frontend && bun run build",
     "dev": "bun run build:frontend && wrangler dev",

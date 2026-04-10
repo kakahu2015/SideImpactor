@@ -12,10 +12,6 @@ import {
   signIpaWithAppleContext,
   type AppleDeveloperContext,
 } from "./apple-signing"
-import initOpensslWasm, {
-  libimobiledevice_generate_pair_record,
-  OpensslClient,
-} from "../../tls/openssl-wasm/pkg/openssl_wasm.js"
 
 interface WebUsbTransportInstance {
   readonly isOpen: boolean
@@ -217,15 +213,31 @@ const webmuxdEncodeStoredPairRecord = resolveWebmuxdExport<
 const webmuxdDecodeStoredPairRecord = resolveWebmuxdExport<
   (payload: StoredPairRecordPayload) => PairRecord | null
 >(webmuxdModuleValue, "decodeStoredPairRecord")
-
-let opensslInitPromise: Promise<void> | null = null
-
-const ensureOpensslReady = async (): Promise<void> => {
-  if (!opensslInitPromise) {
-    opensslInitPromise = initOpensslWasm().then(() => undefined)
+const webmuxdCreateOpenSslWasmTlsFactory = resolveWebmuxdExport<
+  () => {
+    ensureReady?(): Promise<void>
+    createConnection(request: {
+      serverName: string
+      caCertificatePem: string
+      certificatePem: string
+      privateKeyPem: string
+    }): {
+      is_handshaking(): boolean
+      write_plaintext(data: Uint8Array): void
+      feed_tls(data: Uint8Array): void
+      take_tls_out(): Uint8Array
+      take_plain_out(): Uint8Array
+      free(): void
+    }
   }
-  await opensslInitPromise
-}
+>(webmuxdModuleValue, "createOpenSslWasmTlsFactory")
+const webmuxdGeneratePairRecordWithOpenSslWasm = resolveWebmuxdExport<
+  (request: {
+    devicePublicKey: Uint8Array
+    hostId: string
+    systemBuid: string
+  }) => Promise<string>
+>(webmuxdModuleValue, "generatePairRecordWithOpenSslWasm")
 
 const app = document.querySelector<HTMLDivElement>("#app")
 if (!app) {
@@ -578,17 +590,7 @@ const ensureClientSelected = async (): Promise<DirectUsbMuxClient> => {
     log: addLog,
     onStateChange: refreshUi,
     lockdownLabel: "webmuxd.frontend",
-    tlsFactory: {
-      ensureReady: ensureOpensslReady,
-      createConnection: (request) => {
-        return new OpensslClient(
-          request.serverName,
-          request.caCertificatePem,
-          request.certificatePem,
-          request.privateKeyPem,
-        )
-      },
-    },
+    tlsFactory: webmuxdCreateOpenSslWasmTlsFactory(),
     pairRecordFactory: {
       createPairRecord: async (request) => {
         return await createPairRecord(request.devicePublicKey, request.hostId, request.systemBuid)
@@ -1490,12 +1492,11 @@ async function createPairRecord(
   hostId: string,
   systemBuid: string,
 ): Promise<PairRecord> {
-  await ensureOpensslReady()
-  const payloadText = libimobiledevice_generate_pair_record(
-    new Uint8Array(devicePublicKeyBytes),
+  const payloadText = await webmuxdGeneratePairRecordWithOpenSslWasm({
+    devicePublicKey: devicePublicKeyBytes,
     hostId,
     systemBuid,
-  )
+  })
   const payload = JSON.parse(payloadText) as WasmPairRecordPayload
   return {
     hostId: payload.hostId,

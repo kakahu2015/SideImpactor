@@ -22,7 +22,7 @@ export class UsbMuxSession {
   private tagCounter = 1
   private onPacketHandler: ((packet: UsbMuxPacket) => void) | null = null
   private started = false
-  private readBuffer = new Uint8Array(0)
+  private readBuffer: Uint8Array = new Uint8Array(0)
 
   constructor(transport: UsbMuxTransport) {
     this.transport = transport
@@ -95,7 +95,7 @@ export class UsbMuxSession {
       const headerBytes = headerChunk.buffer.slice(
         headerChunk.byteOffset,
         headerChunk.byteOffset + USBMUX_HEADER_SIZE,
-      )
+      ) as ArrayBuffer
       const header = decodeHeader(headerBytes)
       if (
         header.length < USBMUX_HEADER_SIZE ||

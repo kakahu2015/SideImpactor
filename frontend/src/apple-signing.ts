@@ -1,9 +1,7 @@
 import { strFromU8, unzipSync } from "fflate"
 import {
-  AppleAPI,
-  Fetch,
-  signIPA,
   type AnisetteData,
+  type AppleAPI,
   type AppID,
   type Certificate,
   type Device,
@@ -82,12 +80,54 @@ export interface AppleSigningWithContextRequest {
   onLog: (message: string) => void
 }
 
-let appleApiInstance: AppleAPI | null = null
+interface AltsignModule {
+  AppleAPI: new (fetch: unknown) => AppleAPI
+  Fetch: new (
+    initLibcurl: typeof import("./anisette-libcurl-init").initLibcurl,
+    fetcher: (
+      url: string,
+      options: {
+        method?: string
+        headers?: HeadersInit
+        body?: BodyInit | null
+      },
+    ) => Promise<Response>,
+  ) => unknown
+  signIPA(options: {
+    ipaData?: Uint8Array
+    ipaPath?: string
+    outputPath?: string
+    certificate: Uint8Array
+    privateKey: Uint8Array
+    provisioningProfile: Uint8Array
+    bundleID?: string
+    displayName?: string
+    adhoc?: boolean
+    forceSign?: boolean
+  }): Promise<{ data: Uint8Array }>
+}
 
-function getAppleApi(): AppleAPI {
+let appleApiInstance: AppleAPI | null = null
+let altsignModulePromise: Promise<AltsignModule> | null = null
+
+/**
+ * Keep `altsign.js` and its transitive `zsign-wasm` bundle out of the initial
+ * Vite module graph. They are only needed after the user starts login/signing.
+ */
+async function loadAltsignModule(): Promise<AltsignModule> {
+  if (!altsignModulePromise) {
+    altsignModulePromise = import("altsign.js").then((moduleValue) => {
+      return moduleValue as unknown as AltsignModule
+    })
+  }
+  return await altsignModulePromise
+}
+
+async function getAppleApi(): Promise<AppleAPI> {
   if (appleApiInstance) {
     return appleApiInstance
   }
+  const { AppleAPI, Fetch } = await loadAltsignModule()
   const appleFetch = new Fetch(initLibcurl, async (url, options) => {
     const response = await libcurl.fetch(url, {
       method: options.method,
@@ -116,12 +156,12 @@ export async function loginAppleDeveloperAccount(
   const log = request.onLog ?? (() => undefined)
   log(`Login stage: authenticating Apple account ${maskEmail(appleId)}...`)
 
-  const api = getAppleApi()
+  const api = await getAppleApi()
   const { session } = await api.authenticate(
     appleId,
     password,
     request.anisetteData,
-    (submitCode) => {
+    (submitCode: (code: string) => void) => {
       if (!request.onTwoFactorRequired) {
         throw new Error("2FA required but no in-page handler provided")
       }
@@ -160,7 +200,7 @@ export async function refreshAppleDeveloperContext(
   onLog?: (message: string) => void,
 ): Promise<AppleDeveloperContext> {
   const log = onLog ?? (() => undefined)
-  const api = getAppleApi()
+  const api = await getAppleApi()
   log("Signing stage: refreshing team/certificates/devices...")
   const team = await api.fetchTeam(context.session)
   const [certificates, devices] = await Promise.all([
@@ -209,7 +249,7 @@ export async function signIpaWithAppleContext(
     throw new Error("Cannot sign IPA: bundle identifier is missing")
   }
 
-  const api = getAppleApi()
+  const api = await getAppleApi()
   const team = context.team
   onLog(`Signing stage: using team ${team.identifier} (${team.name}).`)
 
@@ -237,6 +277,7 @@ export async function signIpaWithAppleContext(
   const provisioningProfile = await api.fetchProvisioningProfile(context.session, team, appId)
 
   onLog("Signing stage: resigning IPA in browser...")
+  const { signIPA } = await loadAltsignModule()
   const signed = await signIPA({
     ipaData,
     certificate: identity.certificate.publicKey,

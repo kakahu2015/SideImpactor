@@ -28,8 +28,8 @@ The Worker also serves static files from `../frontend/dist` via Wrangler `assets
 ## Setup
 
 ```bash
-cd backend
 bun install
+cd backend
 bun run types
 bun run check
 ```

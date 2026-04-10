@@ -17,10 +17,13 @@ export default defineConfig({
     },
   },
   resolve: {
+    alias: {
+      webmuxd: resolve(repoRootDir, "dependencies/webmuxd/lib/webmuxd.js"),
+    },
     preserveSymlinks: true,
   },
   optimizeDeps: {
-    include: ["webmuxd", "@lbr77/anisette-js/browser"],
+    include: ["@lbr77/anisette-js/browser"],
   },
   build: {
     commonjsOptions: {

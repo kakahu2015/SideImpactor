@@ -143,7 +143,7 @@ const AFC_E_OBJECT_EXISTS = 16
 const AFC_FOPEN_RDONLY = 0x00000001
 const AFC_FOPEN_WR = 0x00000004
 const AFC_RW_CHUNK_SIZE = 60 * 1024
-const EMPTY_BYTES = new Uint8Array(0)
+const EMPTY_BYTES: Uint8Array = new Uint8Array(0)
 
 const DEFAULT_SERVICE_CONNECT_WARMUP_MS = 1800
 const DEFAULT_SERVICE_CONNECT_MAX_ATTEMPTS = 6
@@ -163,9 +163,9 @@ export class DirectUsbMuxClient {
   private muxVersion = 0
   private muxTxSeq = 0
   private muxRxSeq = 0xffff
-  private readBuffer = new Uint8Array(0)
-  private lockdownBuffer = new Uint8Array(0)
-  private afcBuffer = new Uint8Array(0)
+  private readBuffer: Uint8Array = new Uint8Array(0)
+  private lockdownBuffer: Uint8Array = new Uint8Array(0)
+  private afcBuffer: Uint8Array = new Uint8Array(0)
   private afcPacketNum = 0
   private writeChain = Promise.resolve()
   private packetChain = Promise.resolve()
@@ -185,7 +185,7 @@ export class DirectUsbMuxClient {
   private activeService: "lockdownd" | "afc" | "instproxy" | null = null
   private tlsConnection: TlsConnection | null = null
   private preparedTlsConnection: TlsConnection | null = null
-  private preparedTlsFirstFlight = EMPTY_BYTES
+  private preparedTlsFirstFlight: Uint8Array = EMPTY_BYTES
 
   private versionWaiter: Waiter<number> | null = null
   private connectWaiter: Waiter<void> | null = null
@@ -1153,7 +1153,10 @@ export class DirectUsbMuxClient {
   }
 
   private async enqueueSend(packet: Uint8Array): Promise<void> {
-    const bytes = packet.buffer.slice(packet.byteOffset, packet.byteOffset + packet.byteLength)
+    const bytes = packet.buffer.slice(
+      packet.byteOffset,
+      packet.byteOffset + packet.byteLength,
+    ) as ArrayBuffer
 
     const task = this.writeChain.then(async () => {
       await this.transport.send(bytes)

@@ -198,7 +198,7 @@ export default class MobileDevice {
       .then((result) => {
         MobileDevice.logger.log("info", `Received USB data ${result.data?.byteLength} status ${result.status}`);
         if (this.handleData && result.data) {
-          this.handleData(result.data.buffer);
+          this.handleData(result.data.buffer as ArrayBuffer);
         }
         this.inputTransfer = null;
         this.deviceReader();
