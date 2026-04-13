@@ -44,6 +44,13 @@ docker build -t sideload-web .
 docker run -p 3000:3000 sideload-web
 ```
 
+## Cloudflare
+
+```bash
+cd backend
+bun run deploy
+```
+
 ## Test
 
 ```bash
@@ -57,4 +64,3 @@ bun run test:frontend   # frontend vitest suite (141 tests)
 - [webmuxd](https://github.com/hack-different/webmuxd)
 - [zsign](https://github.com/nicehash/zsign)
 - [openssl-wasm](https://github.com/nicehash/openssl-wasm)
-

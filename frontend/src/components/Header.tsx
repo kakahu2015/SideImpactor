@@ -18,7 +18,7 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
           className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-ink no-underline"
         >
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-ink text-[10px] font-bold text-white">
-            A
+            S
           </span>
           Side Impactor
         </a>
