@@ -60,7 +60,11 @@ bun run test:frontend   # frontend vitest suite (141 tests)
 
 ## Credits
 
+Projects referenced:
 - [libimobiledevice](https://github.com/libimobiledevice/libimobiledevice)
 - [webmuxd](https://github.com/hack-different/webmuxd)
 - [zsign](https://github.com/nicehash/zsign)
 - [openssl-wasm](https://github.com/nicehash/openssl-wasm)
+Friends helped with feedback:
+- [@Lakr233](https://github.com/Lakr233)
+
