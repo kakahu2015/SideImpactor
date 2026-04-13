@@ -64,6 +64,8 @@ Projects referenced:
 - [libimobiledevice](https://github.com/libimobiledevice/libimobiledevice)
 - [webmuxd](https://github.com/hack-different/webmuxd)
 - [zsign](https://github.com/nicehash/zsign)
+- [AltSign](https://github.com/rileytestut/AltSign/)
+- [AltStore](https://github.com/altstoreio/AltStore)
 - [openssl-wasm](https://github.com/nicehash/openssl-wasm)
 - [anisette-js](https://github.com/lbr77/anisette-js)
 - [unicorn](https://github.com/lbr77/unicorn/tree/tci-emscripten)
