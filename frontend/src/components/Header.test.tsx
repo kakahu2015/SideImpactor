@@ -23,7 +23,7 @@ describe('Header', () => {
   it('wordmark click also navigates to login (and prevents the anchor default)', async () => {
     const onNav = vi.fn();
     render(<Header currentPage="sign" onNavigate={onNav} />);
-    const link = screen.getByRole('link', { name: /AltStore Web/ });
+    const link = screen.getByRole('link', { name: /Side Impactor/ });
     await userEvent.click(link);
     expect(onNav).toHaveBeenCalledWith('login');
     // Hash should not have been mutated by the default anchor behavior.

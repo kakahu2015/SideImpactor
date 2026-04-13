@@ -20,7 +20,7 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-ink text-[10px] font-bold text-white">
             A
           </span>
-          AltStore Web
+          Side Impactor
         </a>
         <nav className="seg" aria-label="Page">
           <button

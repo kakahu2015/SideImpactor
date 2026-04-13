@@ -1,4 +1,4 @@
-# Sideload.js
+# Side Impactor
 
 Browser-based IPA signing and installation. Pair an iOS device over WebUSB, sign with your Apple Developer account, and install — all from a single web page.
 
@@ -57,3 +57,4 @@ bun run test:frontend   # frontend vitest suite (141 tests)
 - [webmuxd](https://github.com/hack-different/webmuxd)
 - [zsign](https://github.com/nicehash/zsign)
 - [openssl-wasm](https://github.com/nicehash/openssl-wasm)
+

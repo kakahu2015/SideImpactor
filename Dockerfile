@@ -1,4 +1,4 @@
-# Multi-stage Docker build for the sideload.js frontend.
+# Multi-stage Docker build for the Side Impactor frontend.
 
 # --- Stage 1: build ---
 FROM oven/bun:1.3-alpine AS build
