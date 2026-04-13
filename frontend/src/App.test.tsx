@@ -84,6 +84,10 @@ import { App } from './App';
 beforeEach(() => {
   window.localStorage.clear();
   window.location.hash = '';
+  Object.defineProperty(navigator, 'usb', {
+    configurable: true,
+    value: {},
+  });
   checkProvisionedMock.mockResolvedValue(false);
   ensureAnisetteMock.mockResolvedValue({ anisetteData: fakeAnisette, provisioned: true });
   loginAccountMock.mockResolvedValue(fakeContext);
@@ -112,6 +116,35 @@ describe('App — page + nav', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
     expect(window.location.hash).toBe('#/login');
+  });
+});
+
+describe('App — pairing modal', () => {
+  it('keeps trust pending separate from paired success and retries cleanly', async () => {
+    const pendingError = new Error('Pair error=PairingDialogResponsePending');
+    pairDeviceFlowMock
+      .mockImplementationOnce(async (ctx) => {
+        ctx.onTrustPending();
+        throw pendingError;
+      })
+      .mockResolvedValueOnce({ udid: 'UDID-TEST', name: 'iPhone' });
+    isPairingDialogPendingErrorMock.mockImplementation(
+      (error) => error === pendingError || String(error).includes('PairingDialogResponsePending'),
+    );
+
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /Sign & Install/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Connect Device' }));
+
+    expect(await screen.findByText('Trust This Device')).toBeInTheDocument();
+    expect(screen.queryByText('Device Paired')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'I Trusted This Device' }));
+    expect(await screen.findByText('Device Paired')).toBeInTheDocument();
+    await waitFor(() => expect(pairDeviceFlowMock).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.queryByText('Device Paired')).toBeNull();
   });
 });
 

@@ -1,14 +1,25 @@
+import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 
+export type TrustModalState = 'closed' | 'pairing' | 'pending' | 'paired';
+
 interface TrustModalProps {
-  open: boolean;
+  state: TrustModalState;
   onClose: () => void;
-  pairing: boolean;
+  onRetry: () => void;
 }
 
-export function TrustModal({ open, onClose, pairing }: TrustModalProps) {
+export function TrustModal({ state, onClose, onRetry }: TrustModalProps) {
+  if (state === 'closed') return null;
+
   return (
-    <Modal open={open} onClose={onClose} labelledBy="trust-title" closeOnBackdrop={false} closeOnEscape={!pairing}>
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy="trust-title"
+      closeOnBackdrop={false}
+      closeOnEscape={state !== 'pairing'}
+    >
       <div className="flex flex-col items-center text-center">
         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-surface" aria-hidden="true">
           <svg
@@ -26,7 +37,7 @@ export function TrustModal({ open, onClose, pairing }: TrustModalProps) {
           </svg>
         </div>
 
-        {pairing ? (
+        {state === 'pairing' ? (
           <>
             <h2 id="trust-title" className="text-[16px] font-semibold tracking-tight text-ink">
               Continue on Your Device
@@ -43,15 +54,35 @@ export function TrustModal({ open, onClose, pairing }: TrustModalProps) {
               <span>Waiting for device…</span>
             </div>
           </>
+        ) : state === 'pending' ? (
+          <>
+            <h2 id="trust-title" className="text-[16px] font-semibold tracking-tight text-ink">
+              Trust This Device
+            </h2>
+            <p className="mt-2 text-[13px] leading-[1.6] text-muted">
+              Approve the trust prompt on your iPhone or iPad, then return here to finish pairing.
+            </p>
+            <p className="mt-1.5 text-[12px] leading-[1.5] text-subtle">
+              Tap <strong className="font-semibold text-ink">Trust</strong> and enter your passcode if asked.
+            </p>
+            <div className="mt-5 grid w-full gap-2 sm:grid-cols-2">
+              <Button variant="ghost" onClick={onClose} className="w-full">
+                Close
+              </Button>
+              <Button variant="primary" onClick={onRetry} className="w-full">
+                I Trusted This Device
+              </Button>
+            </div>
+          </>
         ) : (
           <>
             <h2 id="trust-title" className="text-[16px] font-semibold tracking-tight text-ink">
               Device Paired
             </h2>
             <p className="mt-2 text-[13px] leading-[1.6] text-muted">Your device is connected and ready for signing.</p>
-            <button type="button" onClick={onClose} className="btn btn-primary mt-5 w-full">
+            <Button variant="primary" onClick={onClose} className="mt-5 w-full">
               Continue
-            </button>
+            </Button>
           </>
         )}
       </div>

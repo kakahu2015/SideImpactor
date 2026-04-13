@@ -7,7 +7,7 @@ import { Header, type AppPage } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { LoginModal } from './components/LoginModal';
 import { SignPage } from './components/SignPage';
-import { TrustModal } from './components/TrustModal';
+import { TrustModal, type TrustModalState } from './components/TrustModal';
 import { TwoFactorModal } from './components/TwoFactorModal';
 import { ProgressCard } from './components/ProgressCard';
 
@@ -42,6 +42,7 @@ import { useLog } from './lib/use-log';
 
 const LOGIN_PAGE_HASH = '#/login';
 const SIGN_PAGE_HASH = '#/sign';
+const TRUST_MODAL_CLOSED: TrustModalState = 'closed';
 
 type BusyState = {
   pair: boolean;
@@ -49,6 +50,11 @@ type BusyState = {
   sign: boolean;
   install: boolean;
 };
+
+type PairFlowResult =
+  | { kind: 'paired'; info: PairedDeviceInfo }
+  | { kind: 'pending' }
+  | { kind: 'failed' };
 
 const idleBusy: BusyState = { pair: false, loginSign: false, sign: false, install: false };
 
@@ -105,7 +111,7 @@ export function App() {
   const lastInstallPercentRef = useRef<number>(0);
 
   // Modals
-  const [trustOpen, setTrustOpen] = useState<boolean>(false);
+  const [trustState, setTrustState] = useState<TrustModalState>(TRUST_MODAL_CLOSED);
   const [twoFactor, setTwoFactor] = useState<{
     open: boolean;
     submit: ((code: string) => void) | null;
@@ -131,6 +137,7 @@ export function App() {
   const activeAccountKey = loginContext ? accountKey(loginContext.appleId, loginContext.team.identifier) : null;
 
   const cachedAccountKeys = useMemo(() => new Set(accountContextMapRef.current.keys()), [savedAccounts, loginContext]);
+  const trustOpen = trustState !== TRUST_MODAL_CLOSED;
 
   // ---- log + progress plumbing ----
   const addLog = useCallback(
@@ -259,17 +266,25 @@ export function App() {
   }, [knownUdids, selectedTargetUdid]);
 
   // ---- pair flow ----
-  const handlePair = useCallback(async (): Promise<PairedDeviceInfo | null> => {
-    if (busyRef.current.pair) return null;
+  /**
+   * lockdownd can return PairingDialogResponsePending before the on-device trust sheet is resolved.
+   * Keep that state separate so the UI never renders "paired" until pairDevice + startSession both finish.
+   */
+  const runPairFlow = useCallback(async (options: {
+    showSuccess: boolean;
+    startLogMessage: string;
+  }): Promise<PairFlowResult> => {
+    if (busyRef.current.pair) return { kind: 'failed' };
     setBusy((prev) => ({ ...prev, pair: true }));
-    setTrustOpen(true);
-    addLog('pair: please continue on your device');
+    setTrustState('pairing');
+    addLog(options.startLogMessage);
     try {
       const info = await pairDeviceFlow({
         log: addLog,
         clientRef: directClientRef,
         onStateChange: () => {},
         onTrustPending: () => {
+          setTrustState('pending');
           addLog('pair: waiting for trust confirmation on device');
         },
       });
@@ -279,19 +294,33 @@ export function App() {
       setSelectedTargetUdid(info.udid);
       saveText(SELECTED_DEVICE_UDID_STORAGE_KEY, info.udid);
       setPairRecordsVersion((v) => v + 1);
-      setTrustOpen(false);
-      return info;
+      setTrustState(options.showSuccess ? 'paired' : TRUST_MODAL_CLOSED);
+      return { kind: 'paired', info };
     } catch (error) {
       if (isPairingDialogPendingError(error)) {
-        return null;
+        return { kind: 'pending' };
       }
-      setTrustOpen(false);
+      setTrustState(TRUST_MODAL_CLOSED);
       addLog(`pair failed: ${formatError(error)}`);
-      return null;
+      return { kind: 'failed' };
     } finally {
       setBusy((prev) => ({ ...prev, pair: false }));
     }
   }, [addLog]);
+
+  const handlePair = useCallback(() => {
+    void runPairFlow({
+      showSuccess: true,
+      startLogMessage: 'pair: please continue on your device',
+    });
+  }, [runPairFlow]);
+
+  const handleTrustRetry = useCallback(() => {
+    void runPairFlow({
+      showSuccess: true,
+      startLogMessage: 'pair: retrying after trust confirmation',
+    });
+  }, [runPairFlow]);
 
   // ---- login flow ----
   const handleLogin = useCallback(async () => {
@@ -433,12 +462,24 @@ export function App() {
         log: addLog,
         clientRef: directClientRef,
         onStateChange: () => {},
-        onTrustPending: () => setTrustOpen(true),
+        onTrustPending: () => setTrustState('pending'),
       });
       let currentDeviceUdid = pairedDeviceInfo?.udid ?? null;
       if (!client.isSessionStarted) {
-        const freshInfo = await handlePair();
-        currentDeviceUdid = freshInfo?.udid ?? null;
+        const pairResult = await runPairFlow({
+          showSuccess: false,
+          startLogMessage: 'install: device trust required, continue on your device',
+        });
+        if (pairResult.kind === 'pending') {
+          addLog('install paused: finish trusting the device, then install again');
+          setProgress({ percent: 0, status: 'idle' });
+          return;
+        }
+        if (pairResult.kind === 'failed') {
+          setProgress({ percent: 0, status: 'failed' });
+          return;
+        }
+        currentDeviceUdid = pairResult.info.udid;
       }
       if (currentDeviceUdid !== targetUdid) {
         throw new Error('connected device udid does not match selected target');
@@ -457,7 +498,7 @@ export function App() {
     } finally {
       setBusy((prev) => ({ ...prev, install: false }));
     }
-  }, [addLog, handlePair, pairedDeviceInfo, prepared, selectedIpaFile, selectedTargetUdid]);
+  }, [addLog, pairedDeviceInfo, prepared, runPairFlow, selectedIpaFile, selectedTargetUdid]);
 
   // ---- switch account ----
   const handleSwitchAccount = useCallback(
@@ -620,7 +661,11 @@ export function App() {
         onDismiss={handleDismissProgress}
       />
 
-      <TrustModal open={trustOpen} onClose={() => setTrustOpen(false)} pairing={busy.pair} />
+      <TrustModal
+        state={trustState}
+        onClose={() => setTrustState(TRUST_MODAL_CLOSED)}
+        onRetry={handleTrustRetry}
+      />
       <TwoFactorModal
         open={twoFactor.open}
         onSubmit={handleTwoFactorSubmit}
