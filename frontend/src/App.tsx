@@ -273,9 +273,9 @@ export function App() {
           addLog('pair: waiting for trust confirmation on device');
         },
       });
-      const changed = pairedDeviceInfo?.udid !== info.udid;
       setPairedDeviceInfo(info);
-      if (changed) clearPrepared();
+      // A signed IPA is keyed by file + UDID, so reconnecting the same target device
+      // must keep the prepared artifact available for install.
       setSelectedTargetUdid(info.udid);
       saveText(SELECTED_DEVICE_UDID_STORAGE_KEY, info.udid);
       setPairRecordsVersion((v) => v + 1);
@@ -291,7 +291,7 @@ export function App() {
     } finally {
       setBusy((prev) => ({ ...prev, pair: false }));
     }
-  }, [addLog, clearPrepared, pairedDeviceInfo]);
+  }, [addLog]);
 
   // ---- login flow ----
   const handleLogin = useCallback(async () => {
